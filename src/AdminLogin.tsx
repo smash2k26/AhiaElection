@@ -71,7 +71,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 type="text"
                 autoFocus
                 required
-                placeholder="adminhuda"
+                placeholder="Enter username"
                 value={username}
                 onChange={(e) => {
                   setUsername(e.target.value);
@@ -91,7 +91,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
               <input
                 type="password"
                 required
-                placeholder="hudaahiaelection"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);

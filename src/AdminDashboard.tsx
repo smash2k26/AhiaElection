@@ -873,9 +873,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <input
                   type="text"
                   required
-                  value={editingConfig.adminUsername || 'adminhuda'}
+                  value={editingConfig.adminUsername ?? ''}
                   onChange={e => setEditingConfig({ ...editingConfig, adminUsername: e.target.value })}
-                  placeholder="adminhuda"
+                  placeholder="Enter admin username"
                   className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:border-neutral-900"
                 />
               </div>
@@ -885,11 +885,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   Admin Password
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   required
-                  value={editingConfig.adminPassword || 'hudaahiaelection'}
+                  value={editingConfig.adminPassword ?? ''}
                   onChange={e => setEditingConfig({ ...editingConfig, adminPassword: e.target.value })}
-                  placeholder="hudaahiaelection"
+                  placeholder="Enter admin password"
                   className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:border-neutral-900"
                 />
               </div>

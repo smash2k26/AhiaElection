@@ -7,21 +7,30 @@ import {
   Download, 
   Search, 
   Check, 
-  Sliders, 
   ArrowLeft, 
   Plus, 
   Edit3, 
   X, 
   Save, 
-  Trash2 
+  Trash2,
+  Globe,
+  Lock,
+  Layers,
+  Settings
 } from 'lucide-react';
 import { 
   resetElectionVotes, 
   updateElectionStatus, 
   seedSampleVotes, 
   savePosition, 
+  deletePosition,
   saveCandidate, 
-  restoreDefaultPositions 
+  deleteCandidate,
+  updateVoteRecord,
+  deleteVoteRecord,
+  saveElectionConfig,
+  restoreDefaultPositions,
+  restoreDefaultConfig 
 } from './electionService';
 
 interface AdminDashboardProps {
@@ -29,6 +38,7 @@ interface AdminDashboardProps {
   votes: VoteRecord[];
   config: ElectionConfig;
   onBackToVoting: () => void;
+  onLogout?: () => void;
 }
 
 const PRESET_AVATARS = [
@@ -46,26 +56,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   positions,
   votes,
   config,
-  onBackToVoting
+  onBackToVoting,
+  onLogout
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'counts' | 'ballots' | 'positions' | 'settings'>('counts');
+  const [activeTab, setActiveTab] = useState<'counts' | 'ballots' | 'positions' | 'branding'>('counts');
   const [isResetting, setIsResetting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  // Position editing modal
+  // Editable Branding & Web Config state
+  const [editingConfig, setEditingConfig] = useState<ElectionConfig>({ ...config });
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Position editing / adding modal
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [isAddingPosition, setIsAddingPosition] = useState(false);
   const [isSavingPosition, setIsSavingPosition] = useState(false);
 
-  // Candidate editing modal
+  // Candidate editing / adding modal
   const [editingCandidateData, setEditingCandidateData] = useState<{
     positionId: string;
     positionTitle: string;
     candidate: Candidate;
+    isNew?: boolean;
   } | null>(null);
   const [isSavingCandidate, setIsSavingCandidate] = useState(false);
+
+  // Ballot editing modal
+  const [editingBallot, setEditingBallot] = useState<VoteRecord | null>(null);
+  const [isSavingBallot, setIsSavingBallot] = useState(false);
+
+  // Sync incoming config props into local state when config changes
+  React.useEffect(() => {
+    setEditingConfig({ ...config });
+  }, [config]);
 
   // Compute tallies
   const tallies = useMemo(() => {
@@ -75,7 +101,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     positions.forEach(pos => {
       counts[pos.id] = {};
       totals[pos.id] = 0;
-      pos.candidates.forEach(c => {
+      pos.candidates?.forEach(c => {
         counts[pos.id][c.id] = 0;
       });
     });
@@ -104,6 +130,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (v.verificationHash && v.verificationHash.toLowerCase().includes(term))
     );
   }, [votes, searchTerm]);
+
+  // Save Web Name & Branding
+  const handleSaveConfigSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingConfig(true);
+      await saveElectionConfig(editingConfig);
+      setActionNotice('Web name and election settings saved to Firebase!');
+      setTimeout(() => setActionNotice(null), 3500);
+    } catch (err: any) {
+      alert('Error saving settings: ' + err.message);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   const handleStatusChange = async (newStatus: 'active' | 'paused' | 'closed') => {
     try {
@@ -142,14 +183,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Position CRUD
   const handleSavePositionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPosition) return;
     try {
       setIsSavingPosition(true);
       await savePosition(editingPosition);
-      setActionNotice(`Updated ${editingPosition.title}.`);
+      setActionNotice(`Position "${editingPosition.title}" saved to Firebase!`);
       setEditingPosition(null);
+      setIsAddingPosition(false);
       setTimeout(() => setActionNotice(null), 3500);
     } catch (err: any) {
       alert('Error saving position: ' + err.message);
@@ -158,19 +201,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleDeletePositionClick = async (positionId: string, positionTitle: string) => {
+    if (!confirm(`Are you sure you want to delete "${positionTitle}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deletePosition(positionId);
+      setActionNotice(`Deleted position "${positionTitle}".`);
+      setTimeout(() => setActionNotice(null), 3500);
+    } catch (err: any) {
+      alert('Error deleting position: ' + err.message);
+    }
+  };
+
+  // Candidate CRUD
   const handleSaveCandidateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCandidateData) return;
     try {
       setIsSavingCandidate(true);
       await saveCandidate(editingCandidateData.positionId, editingCandidateData.candidate);
-      setActionNotice(`Updated ${editingCandidateData.candidate.name}.`);
+      setActionNotice(`Participant "${editingCandidateData.candidate.name}" saved to Firebase!`);
       setEditingCandidateData(null);
       setTimeout(() => setActionNotice(null), 3500);
     } catch (err: any) {
       alert('Error saving participant: ' + err.message);
     } finally {
       setIsSavingCandidate(false);
+    }
+  };
+
+  const handleDeleteCandidateClick = async (positionId: string, candidateId: string, candidateName: string) => {
+    if (!confirm(`Remove participant "${candidateName}" from this position?`)) {
+      return;
+    }
+    try {
+      await deleteCandidate(positionId, candidateId);
+      setActionNotice(`Removed "${candidateName}".`);
+      setTimeout(() => setActionNotice(null), 3500);
+    } catch (err: any) {
+      alert('Error removing candidate: ' + err.message);
+    }
+  };
+
+  // Ballot CRUD
+  const handleSaveBallotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBallot || !editingBallot.id) return;
+    try {
+      setIsSavingBallot(true);
+      await updateVoteRecord(editingBallot.id, {
+        voterName: editingBallot.voterName,
+        adNo: editingBallot.adNo,
+        voterId: editingBallot.adNo
+      });
+      setActionNotice('Voter details updated in Firebase!');
+      setEditingBallot(null);
+      setTimeout(() => setActionNotice(null), 3500);
+    } catch (err: any) {
+      alert('Error updating ballot: ' + err.message);
+    } finally {
+      setIsSavingBallot(false);
+    }
+  };
+
+  const handleDeleteBallotClick = async (voteId: string, voterName: string) => {
+    if (!confirm(`Delete ballot cast by "${voterName}"?`)) {
+      return;
+    }
+    try {
+      await deleteVoteRecord(voteId);
+      setActionNotice(`Ballot for "${voterName}" deleted.`);
+      setTimeout(() => setActionNotice(null), 3500);
+    } catch (err: any) {
+      alert('Error deleting ballot: ' + err.message);
     }
   };
 
@@ -233,17 +337,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-base font-semibold text-neutral-900">
-              Admin Dashboard
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold text-neutral-900">
+                Admin Dashboard
+              </h1>
+              <span className="text-[11px] font-mono text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
+                {config.appName || 'CivicVote'}
+              </span>
+            </div>
             <p className="text-xs text-neutral-500">
-              Real-time Firestore tallies & controls
+              Live Firestore synchronization & full management
             </p>
           </div>
         </div>
 
         {/* Minimal Tab Switcher */}
-        <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl text-xs font-medium text-neutral-600">
+        <div className="flex flex-wrap items-center gap-1 bg-neutral-100 p-1 rounded-xl text-xs font-medium text-neutral-600">
           <button
             onClick={() => setActiveTab('counts')}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
@@ -262,7 +371,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 : 'hover:text-neutral-900'
             }`}
           >
-            All Ballots ({votes.length})
+            Ballots ({votes.length})
           </button>
           <button
             onClick={() => setActiveTab('positions')}
@@ -272,18 +381,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 : 'hover:text-neutral-900'
             }`}
           >
-            Edit Participants
+            Positions & Candidates
           </button>
           <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-3 py-1.5 rounded-lg transition-colors ${
-              activeTab === 'settings'
+            onClick={() => setActiveTab('branding')}
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+              activeTab === 'branding'
                 ? 'bg-white text-neutral-900 shadow-xs'
                 : 'hover:text-neutral-900'
             }`}
           >
-            Controls
+            <Globe className="w-3.5 h-3.5" />
+            <span>Web Name & Settings</span>
           </button>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200/60 transition-colors"
+              title="Sign out of Admin Dashboard"
+            >
+              Log Out
+            </button>
+          )}
         </div>
       </div>
 
@@ -331,7 +450,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {activeTab === 'counts' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-700">Official Results Breakdown</span>
+            <span className="text-xs font-medium text-neutral-700">Live Vote Share</span>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleSeedVotes}
@@ -352,8 +471,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="space-y-4">
             {positions.map((pos) => {
               const posTotal = tallies.totals[pos.id] || 0;
-              const cand1 = pos.candidates[0];
-              const cand2 = pos.candidates[1];
+              const cand1 = pos.candidates?.[0];
+              const cand2 = pos.candidates?.[1];
               const cand1Votes = (cand1 && tallies.counts[pos.id]?.[cand1.id]) || 0;
               const cand2Votes = (cand2 && tallies.counts[pos.id]?.[cand2.id]) || 0;
 
@@ -376,11 +495,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Minimal Comparison Progress Bar */}
+                  {/* Comparison Progress Bar */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs text-neutral-600">
-                      <span>{cand1?.name}: {cand1Votes} ({cand1Pct}%)</span>
-                      <span>{cand2?.name}: {cand2Votes} ({cand2Pct}%)</span>
+                      <span>{cand1?.name || 'Cand 1'}: {cand1Votes} ({cand1Pct}%)</span>
+                      <span>{cand2?.name || 'Cand 2'}: {cand2Votes} ({cand2Pct}%)</span>
                     </div>
                     <div className="h-2 w-full bg-neutral-100 rounded-full overflow-hidden flex">
                       <div
@@ -394,47 +513,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* 2 Participant Cards */}
+                  {/* Participant Cards */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {cand1 && (
-                      <div className="p-3 rounded-xl border border-neutral-200 bg-neutral-50/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <img
-                            src={cand1.avatarUrl}
-                            alt={cand1.name}
-                            className="w-8 h-8 rounded-lg object-cover border border-neutral-200"
-                          />
-                          <div>
-                            <span className="text-xs font-medium text-neutral-900 block">{cand1.name}</span>
-                            <span className="text-[10px] text-neutral-500">{cand1.department}</span>
+                    {pos.candidates?.map((cand) => {
+                      const cVotes = tallies.counts[pos.id]?.[cand.id] || 0;
+                      const cPct = posTotal > 0 ? ((cVotes / posTotal) * 100).toFixed(1) : '0.0';
+                      return (
+                        <div key={cand.id} className="p-3 rounded-xl border border-neutral-200 bg-neutral-50/50 flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={cand.avatarUrl}
+                              alt={cand.name}
+                              className="w-8 h-8 rounded-lg object-cover border border-neutral-200"
+                            />
+                            <div>
+                              <span className="text-xs font-medium text-neutral-900 block">{cand.name}</span>
+                              <span className="text-[10px] text-neutral-500">{cand.department}</span>
+                            </div>
+                          </div>
+                          <div className="text-right font-mono">
+                            <span className="text-sm font-semibold text-neutral-900 block">{cVotes}</span>
+                            <span className="text-[10px] text-neutral-500">{cPct}%</span>
                           </div>
                         </div>
-                        <div className="text-right font-mono">
-                          <span className="text-sm font-semibold text-neutral-900 block">{cand1Votes}</span>
-                          <span className="text-[10px] text-neutral-500">{cand1Pct}%</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {cand2 && (
-                      <div className="p-3 rounded-xl border border-neutral-200 bg-neutral-50/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <img
-                            src={cand2.avatarUrl}
-                            alt={cand2.name}
-                            className="w-8 h-8 rounded-lg object-cover border border-neutral-200"
-                          />
-                          <div>
-                            <span className="text-xs font-medium text-neutral-900 block">{cand2.name}</span>
-                            <span className="text-[10px] text-neutral-500">{cand2.department}</span>
-                          </div>
-                        </div>
-                        <div className="text-right font-mono">
-                          <span className="text-sm font-semibold text-neutral-900 block">{cand2Votes}</span>
-                          <span className="text-[10px] text-neutral-500">{cand2Pct}%</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -444,7 +547,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: ALL BALLOTS & AUDIT TABLE                                          */}
+      {/* TAB 2: ALL BALLOTS (WITH EDIT & DELETE BALLOT)                            */}
       {/* ========================================================================= */}
       {activeTab === 'ballots' && (
         <div className="space-y-3">
@@ -479,13 +582,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th key={p.id} className="py-2.5 px-3.5 font-medium">{p.title}</th>
                     ))}
                     <th className="py-2.5 px-3.5 font-medium">Receipt Code</th>
-                    <th className="py-2.5 px-3.5 font-medium">Time</th>
+                    <th className="py-2.5 px-3.5 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {filteredVotes.length === 0 ? (
                     <tr>
-                      <td colSpan={5 + positions.length} className="text-center py-8 text-neutral-400 text-xs">
+                      <td colSpan={6 + positions.length} className="text-center py-8 text-neutral-400 text-xs">
                         No ballots recorded yet.
                       </td>
                     </tr>
@@ -504,8 +607,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           );
                         })}
                         <td className="py-2.5 px-3.5 font-mono text-neutral-500 text-[11px]">{v.verificationHash}</td>
-                        <td className="py-2.5 px-3.5 text-neutral-400 text-[11px] whitespace-nowrap">
-                          {new Date(v.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => setEditingBallot({ ...v })}
+                            className="text-neutral-500 hover:text-neutral-900 p-1 mr-1"
+                            title="Edit Voter Details"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          {v.id && (
+                            <button
+                              onClick={() => handleDeleteBallotClick(v.id!, v.voterName)}
+                              className="text-neutral-400 hover:text-rose-600 p-1"
+                              title="Delete Ballot"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -518,20 +636,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: EDIT POSITIONS & PARTICIPANTS                                      */}
+      {/* TAB 3: POSITIONS & PARTICIPANTS (FULL CRUD)                               */}
       {/* ========================================================================= */}
       {activeTab === 'positions' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-neutral-500">
-              Customize candidate names, manifestos, or positions.
+              Add, edit, or remove election positions and participants.
             </span>
-            <button
-              onClick={handleRestoreDefaults}
-              className="text-xs text-neutral-500 hover:text-neutral-900 underline"
-            >
-              Reset to Defaults
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setEditingPosition({
+                    id: 'pos_' + Date.now(),
+                    order: positions.length + 1,
+                    title: 'New Executive Position',
+                    subtitle: `Position ${positions.length + 1}`,
+                    description: 'Role responsibilities description',
+                    candidates: []
+                  });
+                  setIsAddingPosition(true);
+                }}
+                className="px-2.5 py-1 text-xs font-medium rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 transition-colors flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Position
+              </button>
+              <button
+                onClick={handleRestoreDefaults}
+                className="text-xs text-neutral-500 hover:text-neutral-900 underline"
+              >
+                Reset to Defaults
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -545,16 +681,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <h3 className="font-semibold text-sm text-neutral-900">{position.title}</h3>
                     <p className="text-xs text-neutral-500">{position.description}</p>
                   </div>
-                  <button
-                    onClick={() => setEditingPosition({ ...position })}
-                    className="text-xs font-medium text-neutral-700 hover:text-neutral-900 border border-neutral-200 px-2.5 py-1 rounded-lg"
-                  >
-                    Edit Title
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        setEditingPosition({ ...position });
+                        setIsAddingPosition(false);
+                      }}
+                      className="text-xs font-medium text-neutral-700 hover:text-neutral-900 border border-neutral-200 px-2.5 py-1 rounded-lg"
+                    >
+                      Edit Title
+                    </button>
+                    {positions.length > 1 && (
+                      <button
+                        onClick={() => handleDeletePositionClick(position.id, position.title)}
+                        className="text-xs font-medium text-rose-500 hover:text-rose-700 border border-neutral-200 px-2 py-1 rounded-lg"
+                        title="Delete Position"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {position.candidates.map((candidate) => (
+                  {position.candidates?.map((candidate) => (
                     <div
                       key={candidate.id}
                       className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 flex flex-col justify-between space-y-3"
@@ -571,16 +721,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <p className="text-[11px] text-neutral-500">{candidate.department}</p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => setEditingCandidateData({
-                            positionId: position.id,
-                            positionTitle: position.title,
-                            candidate: { ...candidate }
-                          })}
-                          className="text-xs font-medium text-neutral-600 hover:text-neutral-900 border border-neutral-200 bg-white px-2 py-0.5 rounded-md"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setEditingCandidateData({
+                              positionId: position.id,
+                              positionTitle: position.title,
+                              candidate: { ...candidate },
+                              isNew: false
+                            })}
+                            className="text-xs font-medium text-neutral-600 hover:text-neutral-900 border border-neutral-200 bg-white px-2 py-0.5 rounded-md"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCandidateClick(position.id, candidate.id, candidate.name)}
+                            className="text-neutral-400 hover:text-rose-600 p-1"
+                            title="Delete Participant"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <p className="text-[11px] text-neutral-600 italic">
@@ -588,6 +748,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </p>
                     </div>
                   ))}
+
+                  {/* Add Candidate Card */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newId = 'cand_' + Date.now();
+                      setEditingCandidateData({
+                        positionId: position.id,
+                        positionTitle: position.title,
+                        candidate: {
+                          id: newId,
+                          name: 'New Candidate',
+                          department: 'Department, Year',
+                          tagline: 'Platform tagline',
+                          bio: 'Candidate biography',
+                          avatarUrl: PRESET_AVATARS[0],
+                          agenda: ['Key campaign agenda point']
+                        },
+                        isNew: true
+                      });
+                    }}
+                    className="p-3.5 rounded-xl border border-dashed border-neutral-300 hover:border-neutral-900 text-neutral-600 hover:text-neutral-900 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Add Participant
+                  </button>
                 </div>
               </div>
             ))}
@@ -596,71 +781,199 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: CONTROLS & SETTINGS                                                */}
+      {/* TAB 4: WEB NAME & ELECTION SETTINGS (EDITABLE IN FIRESTORE)               */}
       {/* ========================================================================= */}
-      {activeTab === 'settings' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-            <h3 className="text-xs font-semibold text-neutral-900">Election Status</h3>
-            <p className="text-xs text-neutral-500">
-              Control whether voters can submit new ballots.
-            </p>
-
-            <div className="grid grid-cols-3 gap-1.5 pt-1">
-              {(['active', 'paused', 'closed'] as const).map(st => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => handleStatusChange(st)}
-                  className={`py-2 text-xs font-medium rounded-lg capitalize border transition-colors ${
-                    config.status === st
-                      ? 'bg-neutral-900 text-white border-neutral-900'
-                      : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
+      {activeTab === 'branding' && (
+        <div className="space-y-4">
+          <form onSubmit={handleSaveConfigSubmit} className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="border-b border-neutral-100 pb-3">
+              <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-neutral-600" />
+                Website Name & Election Branding
+              </h2>
+              <p className="text-xs text-neutral-500">
+                All settings are stored in Firebase Firestore and immediately update the live portal.
+              </p>
             </div>
-          </div>
 
-          <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-            <h3 className="text-xs font-semibold text-neutral-900">Danger Zone</h3>
-            <p className="text-xs text-neutral-500">
-              Clear all {votes.length} submitted ballots in Firestore.
-            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Website / Portal Name <span className="text-neutral-400 font-normal">(shown in top logo)</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingConfig.appName}
+                  onChange={e => setEditingConfig({ ...editingConfig, appName: e.target.value })}
+                  placeholder="e.g. CivicVote or St. Xavier's Elections"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900 font-medium"
+                />
+              </div>
 
-            <div className="pt-1">
-              {!showResetConfirm ? (
-                <button
-                  type="button"
-                  onClick={() => setShowResetConfirm(true)}
-                  className="w-full py-2 rounded-lg border border-neutral-200 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
-                >
-                  Reset All Votes
-                </button>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-xs text-neutral-700">Confirm wiping all {votes.length} votes?</p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={isResetting}
-                      onClick={handleResetVotes}
-                      className="flex-1 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium"
-                    >
-                      {isResetting ? 'Wiping...' : 'Confirm Reset'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowResetConfirm(false)}
-                      className="py-1.5 px-3 rounded-lg border border-neutral-200 text-xs text-neutral-600"
-                    >
-                      Cancel
-                    </button>
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Election Main Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingConfig.electionTitle}
+                  onChange={e => setEditingConfig({ ...editingConfig, electionTitle: e.target.value })}
+                  placeholder="e.g. Annual Student Council Election"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Organization / University Name
+                </label>
+                <input
+                  type="text"
+                  value={editingConfig.organizationName}
+                  onChange={e => setEditingConfig({ ...editingConfig, organizationName: e.target.value })}
+                  placeholder="e.g. University Student Union"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Academic Year / Session
+                </label>
+                <input
+                  type="text"
+                  value={editingConfig.academicYear}
+                  onChange={e => setEditingConfig({ ...editingConfig, academicYear: e.target.value })}
+                  placeholder="e.g. 2026 - 2027"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-neutral-700 mb-1">
+                Announcement Message (Optional banner for voters)
+              </label>
+              <input
+                type="text"
+                value={editingConfig.announcement || ''}
+                onChange={e => setEditingConfig({ ...editingConfig, announcement: e.target.value })}
+                placeholder="e.g. Voting closes today at 5:00 PM!"
+                className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Admin Username (Access Dashboard)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingConfig.adminUsername || 'adminhuda'}
+                  onChange={e => setEditingConfig({ ...editingConfig, adminUsername: e.target.value })}
+                  placeholder="adminhuda"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Admin Password
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingConfig.adminPassword || 'hudaahiaelection'}
+                  onChange={e => setEditingConfig({ ...editingConfig, adminPassword: e.target.value })}
+                  placeholder="hudaahiaelection"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-between items-center border-t border-neutral-100">
+              <span className="text-[11px] text-neutral-400">
+                Saved in collection <code className="text-neutral-700">election_config</code>
+              </span>
+              <button
+                type="submit"
+                disabled={isSavingConfig}
+                className="px-4 py-2 rounded-xl bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800 transition-colors flex items-center gap-1.5"
+              >
+                {isSavingConfig ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>Save Web Name & Settings</span>
+              </button>
+            </div>
+          </form>
+
+          {/* Controls & Danger Zone */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+              <h3 className="text-xs font-semibold text-neutral-900">Election Status</h3>
+              <p className="text-xs text-neutral-500">
+                Lock or unlock ballot submissions in real-time.
+              </p>
+
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {(['active', 'paused', 'closed'] as const).map(st => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => handleStatusChange(st)}
+                    className={`py-2 text-xs font-medium rounded-lg capitalize border transition-colors ${
+                      config.status === st
+                        ? 'bg-neutral-900 text-white border-neutral-900'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+              <h3 className="text-xs font-semibold text-neutral-900">Reset & Wipe</h3>
+              <p className="text-xs text-neutral-500">
+                Delete all {votes.length} votes from Firestore to start a fresh poll.
+              </p>
+
+              <div className="pt-1">
+                {!showResetConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(true)}
+                    className="w-full py-2 rounded-lg border border-neutral-200 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+                  >
+                    Reset All Votes ({votes.length})
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-neutral-700">Wipe all {votes.length} ballots in Firestore?</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={isResetting}
+                        onClick={handleResetVotes}
+                        className="flex-1 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium"
+                      >
+                        {isResetting ? 'Wiping...' : 'Confirm Reset'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowResetConfirm(false)}
+                        className="py-1.5 px-3 rounded-lg border border-neutral-200 text-xs text-neutral-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -673,7 +986,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/20 backdrop-blur-xs">
           <div className="bg-white border border-neutral-200 rounded-2xl max-w-md w-full p-5 shadow-lg space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5">
-              <h3 className="text-sm font-semibold text-neutral-900">Edit Position</h3>
+              <h3 className="text-sm font-semibold text-neutral-900">
+                {isAddingPosition ? 'Add New Position' : 'Edit Position'}
+              </h3>
               <button
                 onClick={() => setEditingPosition(null)}
                 className="text-neutral-400 hover:text-neutral-800"
@@ -733,7 +1048,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   disabled={isSavingPosition}
                   className="px-4 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
                 >
-                  {isSavingPosition ? 'Saving...' : 'Save'}
+                  {isSavingPosition ? 'Saving...' : 'Save Position'}
                 </button>
               </div>
             </form>
@@ -749,7 +1064,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="bg-white border border-neutral-200 rounded-2xl max-w-lg w-full p-5 shadow-lg space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5">
               <h3 className="text-sm font-semibold text-neutral-900">
-                Edit Participant ({editingCandidateData.candidate.name})
+                {editingCandidateData.isNew ? 'Add Participant' : `Edit ${editingCandidateData.candidate.name}`}
               </h3>
               <button
                 onClick={() => setEditingCandidateData(null)}
@@ -881,7 +1196,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ...editingCandidateData,
                         candidate: {
                           ...editingCandidateData.candidate,
-                          agenda: [...cur, 'Key platform pledge']
+                          agenda: [...cur, 'Platform pledge']
                         }
                       });
                     }}
@@ -938,7 +1253,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   disabled={isSavingCandidate}
                   className="px-4 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
                 >
-                  {isSavingCandidate ? 'Saving...' : 'Save'}
+                  {isSavingCandidate ? 'Saving...' : 'Save Participant'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT BALLOT                                                        */}
+      {/* ========================================================================= */}
+      {editingBallot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/20 backdrop-blur-xs">
+          <div className="bg-white border border-neutral-200 rounded-2xl max-w-sm w-full p-5 shadow-lg space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5">
+              <h3 className="text-sm font-semibold text-neutral-900">
+                Edit Voter Information
+              </h3>
+              <button
+                onClick={() => setEditingBallot(null)}
+                className="text-neutral-400 hover:text-neutral-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBallotSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingBallot.voterName}
+                  onChange={e => setEditingBallot({ ...editingBallot, voterName: e.target.value })}
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-700 mb-1">
+                  Admission Number (Ad No)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingBallot.adNo}
+                  onChange={e => setEditingBallot({ ...editingBallot, adNo: e.target.value })}
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingBallot(null)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingBallot}
+                  className="px-4 py-1.5 rounded-lg bg-neutral-900 text-white text-xs font-medium hover:bg-neutral-800"
+                >
+                  {isSavingBallot ? 'Saving...' : 'Save in Firebase'}
                 </button>
               </div>
             </form>

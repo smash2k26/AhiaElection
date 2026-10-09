@@ -54,6 +54,9 @@ export default function App() {
       unsubscribeConfig = subscribeToConfig((cfg) => {
         if (cfg) {
           setConfig(cfg);
+          if (cfg.appName) {
+            document.title = `${cfg.appName} - ${cfg.electionTitle || 'Election Portal'}`;
+          }
         }
       });
 
@@ -98,6 +101,12 @@ export default function App() {
     setView('admin');
   };
 
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    sessionStorage.removeItem('civicvote_admin_auth');
+    setView('voting');
+  };
+
   return (
     <div className="min-h-screen bg-[#fafafa] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white">
       {/* Minimal Top Header */}
@@ -107,15 +116,15 @@ export default function App() {
             onClick={() => setView('voting')}
             className="flex items-center gap-2 cursor-pointer group"
           >
-            <div className="w-6 h-6 rounded-md bg-neutral-900 flex items-center justify-center text-white text-[11px] font-bold tracking-tight">
-              CV
+            <div className="w-6 h-6 rounded-md bg-neutral-900 flex items-center justify-center text-white text-[11px] font-bold tracking-tight uppercase">
+              {(config.appName || 'CV').slice(0, 2)}
             </div>
             <div className="flex items-baseline gap-2">
               <span className="font-semibold text-sm tracking-tight text-neutral-900">
-                CivicVote
+                {config.appName || 'CivicVote'}
               </span>
               <span className="text-[11px] text-neutral-500 hidden sm:inline">
-                Election Portal
+                {config.organizationName || 'Election Portal'}
               </span>
             </div>
           </div>
@@ -167,7 +176,8 @@ export default function App() {
           />
         ) : view === 'admin_login' ? (
           <AdminLogin
-            configuredPassword={config.adminPassword || 'admin'}
+            configuredUsername={config.adminUsername || 'adminhuda'}
+            configuredPassword={config.adminPassword || 'hudaahiaelection'}
             onSuccess={handleAdminLoginSuccess}
             onCancel={() => setView('voting')}
           />
@@ -177,6 +187,7 @@ export default function App() {
             votes={votes}
             config={config}
             onBackToVoting={() => setView('voting')}
+            onLogout={handleAdminLogout}
           />
         )}
       </main>

@@ -5,6 +5,8 @@ import {
   getDocs, 
   setDoc, 
   addDoc, 
+  updateDoc,
+  deleteDoc,
   onSnapshot, 
   query, 
   orderBy, 
@@ -30,6 +32,21 @@ export async function initializeElectionData(): Promise<void> {
         ...DEFAULT_CONFIG,
         createdAt: Date.now()
       });
+    } else {
+      const data = configSnap.data();
+      const updates: any = {};
+      if (!data.appName) {
+        updates.appName = DEFAULT_CONFIG.appName;
+      }
+      if (!data.adminUsername) {
+        updates.adminUsername = 'adminhuda';
+      }
+      if (!data.adminPassword || data.adminPassword === 'admin') {
+        updates.adminPassword = 'hudaahiaelection';
+      }
+      if (Object.keys(updates).length > 0) {
+        await updateDoc(configRef, updates);
+      }
     }
 
     // Seed positions if empty
@@ -82,7 +99,14 @@ export function subscribeToConfig(callback: (config: ElectionConfig) => void) {
     const configRef = doc(db, 'election_config', CONFIG_DOC_ID);
     return onSnapshot(configRef, (snapshot) => {
       if (snapshot.exists()) {
-        callback(snapshot.data() as ElectionConfig);
+        const data = snapshot.data();
+        callback({
+          ...DEFAULT_CONFIG,
+          ...data,
+          appName: data.appName || DEFAULT_CONFIG.appName,
+          adminUsername: data.adminUsername || 'adminhuda',
+          adminPassword: data.adminPassword || 'hudaahiaelection'
+        } as ElectionConfig);
       } else {
         callback(DEFAULT_CONFIG);
       }
@@ -118,7 +142,8 @@ export function subscribeToVotes(
           voterId: data.adNo || data.voterId || 'N/A',
           selections: data.selections || {},
           submittedAt: data.submittedAt || Date.now(),
-          verificationHash: data.verificationHash || 'BALLOT-RECORDED'
+          verificationHash: data.verificationHash || 'BALLOT-RECORDED',
+          avatarUrl: data.avatarUrl
         });
       });
       callback(votes);
@@ -198,6 +223,78 @@ export async function submitBallot(
 }
 
 /**
+ * Update global election settings & web portal name in Firebase.
+ */
+export async function saveElectionConfig(updates: Partial<ElectionConfig>): Promise<void> {
+  const configRef = doc(db, 'election_config', CONFIG_DOC_ID);
+  await setDoc(configRef, updates, { merge: true });
+}
+
+/**
+ * Update an existing position in Firestore.
+ */
+export async function savePosition(position: Position): Promise<void> {
+  const positionRef = doc(db, 'positions', position.id);
+  await setDoc(positionRef, position, { merge: true });
+}
+
+/**
+ * Delete a position from Firestore.
+ */
+export async function deletePosition(positionId: string): Promise<void> {
+  const positionRef = doc(db, 'positions', positionId);
+  await deleteDoc(positionRef);
+}
+
+/**
+ * Update or add a candidate inside a position.
+ */
+export async function saveCandidate(positionId: string, updatedCandidate: Candidate): Promise<void> {
+  const positionRef = doc(db, 'positions', positionId);
+  const snap = await getDoc(positionRef);
+  if (snap.exists()) {
+    const posData = snap.data() as Position;
+    const candidateIndex = posData.candidates.findIndex(c => c.id === updatedCandidate.id);
+    let newCandidates = [...posData.candidates];
+    if (candidateIndex >= 0) {
+      newCandidates[candidateIndex] = updatedCandidate;
+    } else {
+      newCandidates.push(updatedCandidate);
+    }
+    await setDoc(positionRef, { ...posData, candidates: newCandidates }, { merge: true });
+  }
+}
+
+/**
+ * Delete a candidate from a position.
+ */
+export async function deleteCandidate(positionId: string, candidateId: string): Promise<void> {
+  const positionRef = doc(db, 'positions', positionId);
+  const snap = await getDoc(positionRef);
+  if (snap.exists()) {
+    const posData = snap.data() as Position;
+    const newCandidates = posData.candidates.filter(c => c.id !== candidateId);
+    await setDoc(positionRef, { ...posData, candidates: newCandidates }, { merge: true });
+  }
+}
+
+/**
+ * Update an individual ballot (e.g. edit voter name or Ad No typo).
+ */
+export async function updateVoteRecord(voteId: string, updatedData: Partial<VoteRecord>): Promise<void> {
+  const voteRef = doc(db, 'votes', voteId);
+  await updateDoc(voteRef, updatedData);
+}
+
+/**
+ * Delete a specific ballot from Firestore.
+ */
+export async function deleteVoteRecord(voteId: string): Promise<void> {
+  const voteRef = doc(db, 'votes', voteId);
+  await deleteDoc(voteRef);
+}
+
+/**
  * Reset all votes (Admin feature)
  */
 export async function resetElectionVotes(): Promise<void> {
@@ -226,6 +323,26 @@ export async function resetElectionVotes(): Promise<void> {
 export async function updateElectionStatus(status: 'active' | 'paused' | 'closed'): Promise<void> {
   const configRef = doc(db, 'election_config', CONFIG_DOC_ID);
   await setDoc(configRef, { status }, { merge: true });
+}
+
+/**
+ * Restore original template positions and participants in Firestore.
+ */
+export async function restoreDefaultPositions(): Promise<void> {
+  const batch = writeBatch(db);
+  for (const pos of DEFAULT_POSITIONS) {
+    const posRef = doc(db, 'positions', pos.id);
+    batch.set(posRef, pos);
+  }
+  await batch.commit();
+}
+
+/**
+ * Restore default election branding and config in Firestore.
+ */
+export async function restoreDefaultConfig(): Promise<void> {
+  const configRef = doc(db, 'election_config', CONFIG_DOC_ID);
+  await setDoc(configRef, DEFAULT_CONFIG);
 }
 
 /**
@@ -260,43 +377,4 @@ export async function seedSampleVotes(positions: Position[], count = 8): Promise
     }
     await submitBallot(voter.name, voter.adNo, selections);
   }
-}
-
-/**
- * Update an existing position in Firestore (e.g. title, subtitle, description, or its candidates array).
- */
-export async function savePosition(position: Position): Promise<void> {
-  const positionRef = doc(db, 'positions', position.id);
-  await setDoc(positionRef, position, { merge: true });
-}
-
-/**
- * Update a specific candidate inside a position.
- */
-export async function saveCandidate(positionId: string, updatedCandidate: Candidate): Promise<void> {
-  const positionRef = doc(db, 'positions', positionId);
-  const snap = await getDoc(positionRef);
-  if (snap.exists()) {
-    const posData = snap.data() as Position;
-    const candidateIndex = posData.candidates.findIndex(c => c.id === updatedCandidate.id);
-    let newCandidates = [...posData.candidates];
-    if (candidateIndex >= 0) {
-      newCandidates[candidateIndex] = updatedCandidate;
-    } else {
-      newCandidates.push(updatedCandidate);
-    }
-    await setDoc(positionRef, { ...posData, candidates: newCandidates }, { merge: true });
-  }
-}
-
-/**
- * Restore original template positions and participants in Firestore.
- */
-export async function restoreDefaultPositions(): Promise<void> {
-  const batch = writeBatch(db);
-  for (const pos of DEFAULT_POSITIONS) {
-    const posRef = doc(db, 'positions', pos.id);
-    batch.set(posRef, pos);
-  }
-  await batch.commit();
 }

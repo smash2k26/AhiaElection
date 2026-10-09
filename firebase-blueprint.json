@@ -47,12 +47,15 @@
       "description": "Election settings and status",
       "type": "object",
       "properties": {
+        "appName": { "type": "string" },
         "electionTitle": { "type": "string" },
         "organizationName": { "type": "string" },
         "academicYear": { "type": "string" },
+        "adminUsername": { "type": "string" },
+        "adminPassword": { "type": "string" },
         "status": { "type": "string", "enum": ["active", "paused", "closed"] }
       },
-      "required": ["electionTitle", "status"]
+      "required": ["appName", "electionTitle", "status"]
     }
   },
   "firestore": {

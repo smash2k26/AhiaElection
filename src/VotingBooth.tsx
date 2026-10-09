@@ -165,9 +165,17 @@ export const VotingBooth: React.FC<VotingBoothProps> = ({
       {/* Minimal Step Indicator */}
       <div className="bg-white border border-neutral-200/80 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between text-xs text-neutral-500 mb-2">
-          <span className="font-medium text-neutral-900">{config.electionTitle}</span>
+          <span className="font-medium text-neutral-900">
+            {config.appName || 'CivicVote'} <span className="text-neutral-400 font-normal">• {config.electionTitle}</span>
+          </span>
           <span>Step {currentStep} of 4</span>
         </div>
+
+        {config.announcement && (
+          <div className="mb-2.5 py-1 px-2.5 bg-neutral-50 border border-neutral-200 rounded-lg text-[11px] text-neutral-600">
+            {config.announcement}
+          </div>
+        )}
 
         {/* Minimal Progress Line */}
         <div className="grid grid-cols-4 gap-1.5 pt-1">

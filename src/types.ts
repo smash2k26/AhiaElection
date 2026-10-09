@@ -34,12 +34,14 @@ export interface VoteRecord {
 }
 
 export interface ElectionConfig {
-  electionTitle: string;
-  academicYear: string;
-  organizationName: string;
+  appName: string;          // Web / Portal name (e.g. "CivicVote")
+  electionTitle: string;    // Main election title
+  academicYear: string;     // Academic year / session
+  organizationName: string; // Organization / Institution
   status: 'active' | 'paused' | 'closed';
   allowMultipleSubmissionsPerDevice: boolean;
   announcement?: string;
+  adminUsername?: string;
   adminPassword?: string;
 }
 
@@ -117,11 +119,13 @@ export const DEFAULT_POSITIONS: Position[] = [
 ];
 
 export const DEFAULT_CONFIG: ElectionConfig = {
+  appName: 'CivicVote',
   electionTitle: 'Annual General Student Council Election',
   organizationName: 'University Student Union',
   academicYear: '2026 - 2027',
   status: 'active',
   allowMultipleSubmissionsPerDevice: false,
   announcement: 'Voting is officially open! Step through each position to cast your confidential ballot.',
-  adminPassword: 'admin'
+  adminUsername: 'adminhuda',
+  adminPassword: 'hudaahiaelection'
 };

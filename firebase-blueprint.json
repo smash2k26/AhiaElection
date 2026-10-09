@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Vote": {
+      "title": "Vote",
+      "description": "An official ballot cast by an eligible student voter",
+      "type": "object",
+      "properties": {
+        "voterName": {
+          "type": "string",
+          "description": "Full legal name of the voter"
+        },
+        "adNo": {
+          "type": "string",
+          "description": "Admission / Registration number of the voter"
+        },
+        "selections": {
+          "type": "object",
+          "description": "Map of position IDs to selected candidate ID and name"
+        },
+        "submittedAt": {
+          "type": "number",
+          "description": "Epoch timestamp of when ballot was submitted"
+        },
+        "verificationHash": {
+          "type": "string",
+          "description": "Cryptographic receipt verification code"
+        }
+      },
+      "required": ["voterName", "adNo", "selections", "submittedAt", "verificationHash"]
+    },
+    "Position": {
+      "title": "Position",
+      "description": "An elected office or position",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "order": { "type": "number" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "description": { "type": "string" },
+        "candidates": { "type": "array" }
+      },
+      "required": ["id", "title", "candidates"]
+    },
+    "ElectionConfig": {
+      "title": "ElectionConfig",
+      "description": "Election settings and status",
+      "type": "object",
+      "properties": {
+        "electionTitle": { "type": "string" },
+        "organizationName": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "paused", "closed"] }
+      },
+      "required": ["electionTitle", "status"]
+    }
+  },
+  "firestore": {
+    "/votes/{voteId}": {
+      "schema": "Vote",
+      "description": "Collection of all cast ballots"
+    },
+    "/positions/{positionId}": {
+      "schema": "Position",
+      "description": "Contested leadership positions and candidate rosters"
+    },
+    "/election_config/{configId}": {
+      "schema": "ElectionConfig",
+      "description": "Global election configuration"
+    }
+  }
+}

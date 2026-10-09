@@ -1,0 +1,8 @@
+{
+  "name": "CivicVote - 2-Position Election Portal",
+  "description": "Secure election portal for electing candidates across 2 leadership positions with live voting, real-time Firebase tallying, and an interactive admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Elections and positions config
+    match /election_config/{docId} {
+      allow read: if true;
+      allow write: if true; // Allows initial seed or admin update
+    }
+
+    // Positions & candidates
+    match /positions/{positionId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Ballots / votes cast
+    match /votes/{voteId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true; // Admin can reset if needed
+    }
+
+    // Aggregated tallies
+    match /tallies/{tallyId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Audit logs / activity
+    match /audit_logs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow delete: if true;
+    }
+  }
+}

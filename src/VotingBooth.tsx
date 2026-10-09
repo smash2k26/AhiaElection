@@ -53,16 +53,6 @@ export const VotingBooth: React.FC<VotingBoothProps> = ({
   const position1 = positions[0];
   const position2 = positions[1];
 
-  // Quick fill demo helper
-  const handleDemoFill = () => {
-    const demoNames = ['Jordan Reed', 'Taylor Swift-Fox', 'Morgan Rivera', 'Casey Vance', 'Samira Khan', 'Liam O\'Connor'];
-    const chosenName = demoNames[Math.floor(Math.random() * demoNames.length)];
-    const chosenAd = 'AD-' + Math.floor(1000 + Math.random() * 9000);
-    setVoterName(chosenName);
-    setAdNo(chosenAd);
-    setErrorMessage(null);
-  };
-
   // Step 1 -> Step 2 validation
   const handleProceedFromStep1 = (e: React.FormEvent) => {
     e.preventDefault();
@@ -263,19 +253,6 @@ export const VotingBooth: React.FC<VotingBoothProps> = ({
                   className="w-full bg-white border border-neutral-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-neutral-900 font-mono placeholder-neutral-400 focus:outline-none focus:border-neutral-900 transition-colors"
                 />
               </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] text-neutral-400">
-                Encrypted & saved in Firebase Firestore
-              </span>
-              <button
-                type="button"
-                onClick={handleDemoFill}
-                className="text-[11px] text-neutral-600 hover:text-neutral-900 underline font-medium"
-              >
-                Auto-fill demo student
-              </button>
             </div>
 
             <div className="pt-2">

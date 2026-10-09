@@ -102,17 +102,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             </div>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200/80 text-[11px] text-neutral-600 space-y-0.5">
-            <div>
-              <span className="text-neutral-400">Username: </span>
-              <code className="font-mono font-medium text-neutral-900">{expectedUsername}</code>
-            </div>
-            <div>
-              <span className="text-neutral-400">Password: </span>
-              <code className="font-mono font-medium text-neutral-900">{expectedPassword}</code>
-            </div>
-          </div>
-
           {error && (
             <div className="p-2.5 rounded-xl bg-neutral-100 border border-neutral-300 text-neutral-900 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-neutral-700 shrink-0" />
